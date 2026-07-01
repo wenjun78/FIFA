@@ -1,0 +1,33 @@
+# MediaPipe pose model — auto-downloaded on first run (see pose.py → ensure_model).
+# Don't commit it; it re-fetches itself and just bloats the repo.
+pose_landmarker_full.task
+*.task
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Streamlit — keep .streamlit/config.toml, but never commit secrets
+.streamlit/secrets.toml
+
+# Downloaded / temporary media
+*.part
+*.ytdl
+tmp/
+*.tmp
+
+# OS & editor cruft
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
