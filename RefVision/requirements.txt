@@ -1,9 +1,8 @@
-# RefVision — pose-only officiating console (MediaPipe). No GPU, no external model APIs.
+# RefVision — pose-only officiating console (MediaPipe). 
 streamlit>=1.40
 opencv-python-headless>=4.8
 mediapipe>=0.10.9
 yt-dlp
 numpy
 pillow
-# optional: click-to-place for the contact-point marker (falls back to sliders if absent)
 streamlit-image-coordinates
