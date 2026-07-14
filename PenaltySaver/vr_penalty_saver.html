@@ -1,0 +1,1579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Penalty Save Simulation</title>
+<style>
+  :root{ --night:#0b1220; --line:#eef3ee; --accent:#ffd23f; --danger:#ff5252; }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--night);
+    font-family:"Segoe UI",system-ui,sans-serif;color:var(--line)}
+  #hud{position:fixed;top:14px;left:50%;transform:translateX(-50%);
+    display:flex;gap:18px;align-items:center;background:rgba(6,12,24,.72);
+    border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:10px 18px;
+    backdrop-filter:blur(6px);z-index:5;pointer-events:none}
+  #hud .big{font-size:22px;font-weight:700;letter-spacing:.5px}
+  #hud .lbl{font-size:11px;text-transform:uppercase;letter-spacing:1.4px;opacity:.65}
+  #hud .stat{text-align:center;min-width:64px}
+  #dots{display:flex;gap:6px}
+  .dot{width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.4)}
+  .dot.save{background:var(--accent);border-color:var(--accent)}
+  .dot.goal{background:var(--danger);border-color:var(--danger)}
+  .dot.miss,.dot.post{background:#7fd1ff;border-color:#7fd1ff}
+  #msg{position:fixed;top:22%;left:50%;transform:translateX(-50%);
+    font-size:56px;font-weight:800;letter-spacing:2px;text-shadow:0 4px 24px rgba(0,0,0,.7);
+    z-index:5;pointer-events:none;opacity:0;transition:opacity .15s}
+  #panel{position:fixed;inset:0;display:flex;align-items:flex-start;justify-content:center;
+    background:radial-gradient(1200px 600px at 50% -10%, #16233f 0%, #0a101f 55%, #070b16 100%);
+    z-index:10;padding:28px 16px;overflow:auto}
+  #card{width:min(680px,100%);display:flex;flex-direction:column;gap:18px;text-align:center;
+    background:rgba(10,16,30,.55);border:1px solid rgba(255,255,255,.08);border-radius:20px;
+    padding:30px 34px 26px;box-shadow:0 24px 80px rgba(0,0,0,.55)}
+  #panel h1{font-size:38px;margin:0;letter-spacing:2px;font-weight:800}
+  #panel h1 span{color:var(--accent)}
+  .tag{font-size:14px;opacity:.7;margin:-8px 0 4px;line-height:1.5}
+  .sec{display:flex;align-items:center;gap:16px}
+  .secLbl{font-size:10.5px;letter-spacing:2.2px;text-transform:uppercase;opacity:.5;
+    min-width:92px;text-align:right;font-weight:700}
+  .row{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-start;flex:1}
+  .pick{font-size:12.5px;font-weight:700;padding:8px 16px;border-radius:999px;cursor:pointer;
+    background:rgba(255,255,255,.04);color:var(--line);border:1.5px solid rgba(255,255,255,.18);
+    transition:all .15s;letter-spacing:.4px}
+  .pick:hover{border-color:rgba(255,255,255,.45)}
+  .pick.sel{background:rgba(255,210,63,.12);border-color:var(--accent);color:var(--accent)}
+  .cta{display:flex;gap:12px;justify-content:center;margin-top:4px}
+  .btn{font-size:16px;font-weight:800;padding:13px 36px;border-radius:14px;border:0;
+    cursor:pointer;letter-spacing:.6px;transition:transform .12s}
+  .btn:hover{transform:translateY(-1px)}
+  #btnVR{background:var(--accent);color:#14203a;box-shadow:0 6px 24px rgba(255,210,63,.25)}
+  #btnVR[disabled]{background:#2c3752;color:#7d88a3;cursor:not-allowed;box-shadow:none}
+  #btnFlat{background:transparent;color:var(--line);border:2px solid rgba(255,255,255,.35)}
+  .cols{display:flex;gap:26px;text-align:left;border-top:1px solid rgba(255,255,255,.08);padding-top:18px}
+  .col{flex:1;display:flex;flex-direction:column;gap:7px}
+  .col .secLbl{text-align:left;min-width:0;margin-bottom:3px}
+  .chip{display:flex;gap:9px;align-items:baseline;font-size:12.5px;line-height:1.45;opacity:.85}
+  .chip b{font-size:12.5px}
+  .dot2{width:9px;height:9px;border-radius:3px;flex:none;position:relative;top:0}
+  .ctl{display:block;font-size:12.5px;opacity:.85;line-height:2.1}
+  .kbd{font-family:ui-monospace,Consolas,monospace;font-size:11px;font-weight:700;
+    background:#1a2440;border:1px solid rgba(255,255,255,.22);border-bottom-width:2.5px;
+    border-radius:6px;padding:2px 8px;color:#ffd23f;white-space:nowrap;
+    display:inline-block;vertical-align:baseline;margin-right:6px}
+  .fine{font-size:11.5px;opacity:.45;line-height:1.6;margin:0}
+  @media (max-width:560px){ .cols{flex-direction:column} .sec{flex-direction:column;gap:6px}
+    .secLbl{text-align:center;min-width:0} .row{justify-content:center} }
+  #crosshair{position:fixed;left:0;top:0;width:26px;height:26px;margin:-13px 0 0 -13px;
+    border:2px solid var(--accent);border-radius:50%;z-index:4;pointer-events:none;display:none}
+  #crosshair::after{content:"";position:absolute;left:50%;top:50%;width:4px;height:4px;
+    margin:-2px 0 0 -2px;background:var(--accent);border-radius:50%}
+  #keys{display:none}
+  #keys.on{display:contents}
+  .keyPanel{position:fixed;top:14px;z-index:5;background:rgba(6,12,24,.72);
+    border:1px solid rgba(255,255,255,.10);padding:10px 14px;border-radius:12px;
+    backdrop-filter:blur(6px);transition:opacity .6s;max-width:230px}
+  #keys.dim .keyPanel{opacity:.14}
+  .keyPanel:hover{opacity:1 !important}
+  .keyPanel.kLeft{left:14px}
+  .keyPanel.kRight{right:14px}
+  .keyPanel .kRow{display:flex;flex-direction:column;gap:1px;
+    font-size:11.5px;color:#dfe6f2;line-height:1.9;align-items:flex-start}
+  .keyPanel .kbd{margin-right:6px}
+  .keyPanel .grp{white-space:nowrap;opacity:.9}
+</style>
+</head>
+<body>
+<div id="hud" style="display:none">
+  <div class="stat"><div class="big" id="sSaves">0</div><div class="lbl">Saves</div></div>
+  <div id="dots"></div>
+  <div class="stat"><div class="big" id="sShot">1/5</div><div class="lbl" id="sShotLbl">Shot</div></div>
+  <div class="stat"><div class="big" id="sDiff" style="font-size:15px">PRO</div><div class="lbl">Level</div></div>
+</div>
+<div id="msg"></div>
+<div id="crosshair"></div>
+
+<div id="keys">
+  <div class="keyPanel kLeft">
+    <div class="kRow">
+      <span class="grp"><span class="kbd">MOUSE</span>hands</span>
+      <span class="grp"><span class="kbd">A/D</span>full stretch</span>
+      <span class="grp"><span class="kbd">S+A/D</span>low</span>
+      <span class="grp"><span class="kbd">W+A/D</span>top corner</span>
+      <span class="grp"><span class="kbd">W</span>jump · <span class="kbd">S</span>stay big</span>
+    </div>
+  </div>
+  <div class="keyPanel kRight">
+    <div class="kRow">
+      <span class="grp"><span class="kbd">HOLD</span>commit on last stride</span>
+      <span class="grp"><span class="kbd">SHIFT</span>feint</span>
+      <span class="grp"><span class="kbd">K</span>kits · <span class="kbd">L/R/M</span>foot</span>
+      <span class="grp"><span class="kbd">1-4</span>taker · <span class="kbd">0</span>random</span>
+      <span class="grp"><span class="kbd">ESC</span>menu</span>
+    </div>
+  </div>
+</div>
+
+<div id="panel">
+<div id="card">
+  <h1>PENALTY SAVE <span>SIMULATION</span></h1>
+  <p class="tag">First-person goalkeeper. Read the run-up, commit your weight, save what your body can actually reach.</p>
+
+  <div class="sec"><div class="secLbl">Mode</div>
+    <div class="row" id="modeRow">
+      <button class="pick sel" data-m="shootout">SHOOTOUT · 5</button>
+      <button class="pick" data-m="practice">PRACTICE · ∞</button>
+    </div>
+  </div>
+  <div class="sec"><div class="secLbl">Difficulty</div>
+    <div class="row" id="diffRow">
+      <button class="pick" data-d="easy">EASY</button>
+      <button class="pick sel" data-d="pro">PRO</button>
+      <button class="pick" data-d="legend">LEGEND</button>
+    </div>
+  </div>
+  <div class="sec"><div class="secLbl">Highlights</div>
+    <div class="row" id="hlRow">
+      <button class="pick sel" data-h="on">ON</button>
+      <button class="pick" data-h="off">OFF</button>
+    </div>
+  </div>
+  <div class="sec"><div class="secLbl">Height</div>
+    <div class="row" style="align-items:center;gap:14px">
+      <input type="range" id="gkSlider" min="180" max="210" step="1" value="188"
+        style="width:200px;accent-color:#ffd23f">
+      <span id="gkHLabel" style="font-size:14px;font-weight:700;color:#ffd23f">188 cm</span>
+    </div>
+  </div>
+
+  <div class="cta">
+    <button class="btn" id="btnVR" disabled>Checking VR…</button>
+    <button class="btn" id="btnFlat">Play on screen</button>
+  </div>
+
+  <div class="cols">
+    <div class="col">
+      <div class="secLbl">The takers</div>
+      <div class="chip" style="opacity:.65"><span>Cues appear in real research order: <b>approach angle</b> (early, rough) → <b>gaze</b> (lies) → <b>hips</b> (lie-able) → <b>plant foot</b> (~85% honest, but only ~0.2s before contact). Kit colour is the freebie — <span class="kbd" style="margin:0">K</span> hides it</span></div>
+      <div class="chip"><span class="dot2" style="background:#ff5252"></span><span><b style="color:#ff8a8a">Power</b> — short run, 30% faster, knuckles in the air</span></div>
+      <div class="chip"><span class="dot2" style="background:#4d94ff"></span><span><b style="color:#8ab8ff">Bender</b> — angled run, whips it into the corner</span></div>
+      <div class="chip"><span class="dot2" style="background:#b06aff"></span><span><b style="color:#c98bff">Trickster</b> — freeze-fakes, lies with his body, chips</span></div>
+      <div class="chip"><span class="dot2" style="background:#ff8a00"></span><span><b style="color:#ffb066">Stutter run</b> — hop-steps, reads YOUR lean at contact. Stand still and nervy ones crack</span></div>
+    </div>
+    <div class="col">
+      <div class="secLbl">Controls</div>
+      <div class="ctl"><span class="kbd">MOUSE</span> hands, true arm reach</div>
+      <div class="ctl"><span class="kbd">A / D</span> full-stretch dive</div>
+      <div class="ctl"><span class="kbd">S + A / D</span> low dive</div>
+      <div class="ctl"><span class="kbd">W + A / D</span> top corner &nbsp;·&nbsp; <span class="kbd">W</span> jump &nbsp;·&nbsp; <span class="kbd">S</span> collapse centre</div>
+      <div class="ctl"><span class="kbd">HOLD key</span> commit — the keeper goes on the taker's final stride, like the pros</div>
+      <div class="ctl"><span class="kbd">SHIFT + hold</span> feint — lean without committing</div>
+      <div class="ctl"><span class="kbd">K</span> hide / show kit colours</div>
+      <div class="ctl"><span class="kbd">L</span> <span class="kbd">R</span> <span class="kbd">M</span> takers' foot: left / right / mixed</div>
+      <div class="ctl"><span class="kbd">1-4</span> choose the next taker type &nbsp;·&nbsp; <span class="kbd">0</span> back to random</div>
+      <div class="ctl"><span class="kbd">1-5</span> replay cameras &nbsp;·&nbsp; <span class="kbd">ESC</span> menu</div>
+    </div>
+  </div>
+  <p class="fine">Whistle starts every kick — hold your line until contact. A dive commits ~1.8s; reversing a lean leaves you off balance. Tells are honest on EASY, lie on LEGEND. VR: controllers are your hands, thumbstick shuffles the line, your real body dives.</p>
+</div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+/* ================= renderer / scene / rig ================= */
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.xr.enabled = true;
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b1220);
+scene.fog = new THREE.Fog(0x0b1220, 40, 120);
+
+/* pick your keeper: the tall man reaches further but is slower out and slower up;
+   the short man explodes and recovers quickly but the corners are further away. */
+/* keeper height is continuous, 180–210 cm. Anthropometrics scale with it:
+   eye line (set-position crouch ≈ 21cm below stature), single-arm reach ≈
+   (wingspan − shoulders)/2 with wingspan ≈ height. Agility scales the other
+   way — the big man covers more goal but pays for it in every timer. */
+let gkH = 188;                        // cm
+let GKP = {}, EYE = 1.67;
+function applyGK(){
+  const h = gkH/100;                          // metres
+  const t = (gkH-180)/30;                     // 0 @180cm … 1 @210cm
+  GKP = {
+    eye:   h - 0.21,                          // crouched eye line
+    arm:   (h - 0.40)/2,                      // 0.70m @180 … 0.85m @210
+    reach: 2.30 + t*0.35,                     // dive travel
+    out:   0.24 + t*0.14,                     // slower off the mark…
+    rec:   0.70 + t*0.45,                     // …and slower back up
+    jump:  0.52 - t*0.16,
+    agil:  1.35 - t*0.60,
+    k:     (h - 0.21)/1.58,                   // skeleton scale: torso & legs grow too
+  };
+  EYE = GKP.eye;
+  dive.OUT = GKP.out; dive.REC = GKP.rec; dive.reachX = GKP.reach;
+}
+const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.05, 200);
+const rig = new THREE.Group();
+rig.position.set(0, 0, -0.12);   // ON the line: body in front of the frame and the
+                                  // top net, so nothing to clip through when jumping
+rig.add(camera);
+camera.position.set(0, EYE, 0);
+scene.add(rig);
+
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+/* ================= lights ================= */
+scene.add(new THREE.HemisphereLight(0x9db4ff, 0x18321f, 0.55));
+const flood = new THREE.DirectionalLight(0xfff2d8, 1.6);
+flood.position.set(12, 22, -8);
+flood.castShadow = true;
+flood.shadow.mapSize.set(2048, 2048);
+flood.shadow.camera.left=-20; flood.shadow.camera.right=20;
+flood.shadow.camera.top=20; flood.shadow.camera.bottom=-20;
+scene.add(flood);
+const flood2 = new THREE.DirectionalLight(0xd8e6ff, 0.7);
+flood2.position.set(-14, 18, -4);
+scene.add(flood2);
+
+/* ================= pitch ================= */
+const pitchTex = (()=> {
+  const c=document.createElement('canvas'); c.width=c.height=512;
+  const g=c.getContext('2d');
+  for(let i=0;i<8;i++){ g.fillStyle = i%2? '#1d7a3f':'#1a6e39'; g.fillRect(0,i*64,512,64); }
+  const t=new THREE.CanvasTexture(c);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(6,6);
+  return t;
+})();
+const pitch = new THREE.Mesh(
+  new THREE.PlaneGeometry(90,90),
+  new THREE.MeshStandardMaterial({map:pitchTex, roughness:1})
+);
+pitch.rotation.x = -Math.PI/2;
+pitch.receiveShadow = true;
+scene.add(pitch);
+
+const lineMat = new THREE.MeshBasicMaterial({color:0xeef3ee});
+function lineStrip(w,d,x,z){ const m=new THREE.Mesh(new THREE.PlaneGeometry(w,d),lineMat);
+  m.rotation.x=-Math.PI/2; m.position.set(x,0.011,z); scene.add(m); }
+lineStrip(30,0.12,0,0);
+lineStrip(0.12,16.5,-20.16,-8.25); lineStrip(0.12,16.5,20.16,-8.25);
+lineStrip(40.32,0.12,0,-16.5);
+lineStrip(0.12,5.5,-9.16,-2.75); lineStrip(0.12,5.5,9.16,-2.75);
+lineStrip(18.32,0.12,0,-5.5);
+const spot = new THREE.Mesh(new THREE.CircleGeometry(0.16,24), lineMat);
+spot.rotation.x=-Math.PI/2; spot.position.set(0,0.012,-11); scene.add(spot);
+
+/* ================= goal ================= */
+const GOAL_W=7.32, GOAL_H=2.44, POST_R=0.06;
+const postMat = new THREE.MeshStandardMaterial({color:0xffffff, roughness:.35});
+function post(x,y,z,h,rotZ=0){
+  const p=new THREE.Mesh(new THREE.CylinderGeometry(POST_R,POST_R,h,16),postMat);
+  p.position.set(x,y,z); p.rotation.z=rotZ; p.castShadow=true; scene.add(p); return p;
+}
+post(-GOAL_W/2, GOAL_H/2, 0, GOAL_H);
+post( GOAL_W/2, GOAL_H/2, 0, GOAL_H);
+post(0, GOAL_H, 0, GOAL_W+POST_R*2, Math.PI/2);
+const netMat = new THREE.MeshBasicMaterial({color:0xffffff, wireframe:true, transparent:true, opacity:0.28});
+const netBack = new THREE.Mesh(new THREE.PlaneGeometry(GOAL_W,GOAL_H,26,12), netMat);
+netBack.position.set(0,GOAL_H/2,1.6); scene.add(netBack);
+/* spring-mass net: each vertex has a z-offset and velocity; impacts punch it
+   outward, springs pull it home, damping makes it ripple and settle. */
+const netPos = netBack.geometry.attributes.position;
+const NETN = netPos.count;
+const netZ = new Float32Array(NETN), netV = new Float32Array(NETN);
+let netLive = false;
+function punchNet(wx, wy, strength){
+  for(let i=0;i<NETN;i++){
+    const vx = netPos.getX(i);                     // local x = world x
+    const vy = netPos.getY(i) + GOAL_H/2;          // local y -> world y
+    const d2 = (vx-wx)*(vx-wx) + (vy-wy)*(vy-wy);
+    netV[i] += strength * Math.exp(-d2/0.22);
+  }
+  netLive = true;
+}
+function stepNet(dt){
+  if(!netLive) return;
+  let energy = 0;
+  for(let i=0;i<NETN;i++){
+    netV[i] += (-netZ[i]*55 - netV[i]*6) * dt;     // spring home + damping
+    netZ[i] += netV[i]*dt;
+    netPos.setZ(i, netZ[i]);
+    energy += netZ[i]*netZ[i] + netV[i]*netV[i];
+  }
+  netPos.needsUpdate = true;
+  if(energy < 1e-5){                                // settled: zero out and sleep
+    for(let i=0;i<NETN;i++){ netZ[i]=0; netV[i]=0; netPos.setZ(i,0); }
+    netPos.needsUpdate = true;
+    netLive = false;
+  }
+}
+const netTop = new THREE.Mesh(new THREE.PlaneGeometry(GOAL_W,1.7,20,5), netMat);
+netTop.rotation.x=-Math.PI/2; netTop.position.set(0,GOAL_H,0.8); scene.add(netTop);
+for(const s of [-1,1]){
+  const side = new THREE.Mesh(new THREE.PlaneGeometry(1.6,GOAL_H,5,8), netMat);
+  side.rotation.y = Math.PI/2;
+  side.position.set(s*GOAL_W/2, GOAL_H/2, 0.8); scene.add(side);
+}
+
+/* ================= stadium ================= */
+const standMat = new THREE.MeshStandardMaterial({color:0x1c2740, roughness:.9});
+for(const [x,z,w,d] of [[0,-45,80,8],[ -42,-15,8,60],[42,-15,8,60]]){
+  const st=new THREE.Mesh(new THREE.BoxGeometry(w,10,d),standMat);
+  st.position.set(x,5,z); scene.add(st);
+}
+for(const [x,z] of [[-30,-40],[30,-40]]){
+  const pole=post(x,9,z,18); pole.material=standMat;
+  const lamp=new THREE.Mesh(new THREE.SphereGeometry(0.8,12,12),
+    new THREE.MeshBasicMaterial({color:0xfff6cf}));
+  lamp.position.set(x,18.4,z); scene.add(lamp);
+}
+
+/* ================= crowd behind your goal ================= */
+function crowdTexture(palette){
+  const c=document.createElement('canvas'); c.width=512; c.height=256;
+  const g=c.getContext('2d');
+  g.fillStyle='#141c30'; g.fillRect(0,0,512,256);
+  for(let i=0;i<1400;i++){
+    g.fillStyle=palette[(Math.random()*palette.length)|0];
+    g.beginPath();
+    g.arc(Math.random()*512, Math.random()*256, 2.2+Math.random()*1.8, 0, Math.PI*2);
+    g.fill();
+  }
+  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(3,1);
+  return t;
+}
+const homeStand = new THREE.Mesh(new THREE.BoxGeometry(34,9,6),
+  new THREE.MeshBasicMaterial({map:crowdTexture(['#ffd23f','#11a86a','#eef3ee','#2f8f4f'])}));
+homeStand.position.set(0,4.5,9); homeStand.visible=false; scene.add(homeStand);
+const awayStand = new THREE.Mesh(new THREE.BoxGeometry(34,9,6),
+  new THREE.MeshBasicMaterial({map:crowdTexture(['#c62839','#eef3ee','#7a1020','#ff8a8a'])}));
+awayStand.position.set(0,4.5,9); awayStand.visible=false; scene.add(awayStand);
+let crowdMode='home';
+function applyCrowd(){
+  homeStand.visible = crowdMode==='home';
+  awayStand.visible = crowdMode==='away';
+}
+
+/* ================= striker: jointed humanoid No.9 ================= */
+const KIT = {power:0xc62839, tech:0x2f6fd0, trick:0x8a3fd0, stutter:0xff8a00, normal:0x2f8f4f};
+const kitMat   = new THREE.MeshStandardMaterial({color:0x2f8f4f, roughness:.7});
+const skinMat  = new THREE.MeshStandardMaterial({color:0xd9a97e, roughness:.85});
+const shortsMat= new THREE.MeshStandardMaterial({color:0xf4f4f4, roughness:.8});
+const sockMat  = new THREE.MeshStandardMaterial({color:0x1a1a1a, roughness:.85});
+const bootMat  = new THREE.MeshStandardMaterial({color:0xefefe6, roughness:.4});
+const hairMat  = new THREE.MeshStandardMaterial({color:0x24160b, roughness:.9});
+
+function seg(mat, r1, r2, len){       // limb segment: pivot at top, mesh hangs down
+  const g=new THREE.Group();
+  const m=new THREE.Mesh(new THREE.CylinderGeometry(r2, r1, len, 10), mat);
+  m.position.y=-len/2; m.castShadow=true; g.add(m);
+  const cap=new THREE.Mesh(new THREE.SphereGeometry(r1,10,10), mat);
+  cap.castShadow=true; g.add(cap);
+  return g;
+}
+
+const striker = new THREE.Group(); scene.add(striker);
+const pelvis = new THREE.Group(); pelvis.position.y=1.03; striker.add(pelvis);
+const pelvisMesh = new THREE.Mesh(new THREE.SphereGeometry(0.17,12,12), shortsMat);
+pelvisMesh.scale.set(1.15,0.75,0.85); pelvisMesh.castShadow=true; pelvis.add(pelvisMesh);
+
+const spine = new THREE.Group(); spine.position.y=0.06; pelvis.add(spine);
+const chest = new THREE.Mesh(new THREE.CapsuleGeometry(0.19,0.40,6,12), kitMat);
+chest.position.y=0.37; chest.castShadow=true; spine.add(chest);
+const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.06,0.08,8), skinMat);
+neck.position.y=0.68; spine.add(neck);
+const headG = new THREE.Group(); headG.position.y=0.82; spine.add(headG);
+const headM = new THREE.Mesh(new THREE.SphereGeometry(0.12,16,16), skinMat);
+headM.castShadow=true; headG.add(headM);
+const hair = new THREE.Mesh(new THREE.SphereGeometry(0.123,16,16,0,Math.PI*2,0,Math.PI*0.5), hairMat);
+hair.position.y=0.012; headG.add(hair);
+const nose = new THREE.Mesh(new THREE.ConeGeometry(0.02,0.05,6), skinMat);
+nose.rotation.x=-Math.PI/2; nose.position.set(0,-0.01,0.12); headG.add(nose);
+for(const sx of [-1,1]){
+  const ear=new THREE.Mesh(new THREE.SphereGeometry(0.025,8,8), skinMat);
+  ear.position.set(sx*0.115,0,0.01); headG.add(ear);
+}
+const jaw=new THREE.Mesh(new THREE.SphereGeometry(0.095,12,12), skinMat);
+jaw.scale.set(0.95,0.75,0.9); jaw.position.set(0,-0.06,0.02); headG.add(jaw);
+
+function makeLeg(sideX){
+  const hip=new THREE.Group(); hip.position.set(sideX,-0.02,0); pelvis.add(hip);
+  const thigh=seg(shortsMat,0.09,0.075,0.47); hip.add(thigh);
+  const knee=new THREE.Group(); knee.position.y=-0.47; thigh.add(knee);
+  const shin=seg(sockMat,0.062,0.047,0.45); knee.add(shin);
+  const boot=new THREE.Mesh(new THREE.BoxGeometry(0.10,0.075,0.27), bootMat);
+  boot.position.set(0,-0.48,0.075); boot.castShadow=true; shin.add(boot);
+  return {hip, knee, boot};
+}
+const L=makeLeg(-0.11), R=makeLeg(0.11);
+// shirt number
+const numTex=(()=>{const c=document.createElement('canvas');c.width=c.height=128;
+  const g=c.getContext('2d'); g.clearRect(0,0,128,128);
+  g.fillStyle='#fff'; g.font='bold 104px system-ui'; g.textAlign='center';
+  g.fillText('9',64,100); return new THREE.CanvasTexture(c);})();
+const numPlane=new THREE.Mesh(new THREE.PlaneGeometry(0.20,0.24),
+  new THREE.MeshBasicMaterial({map:numTex, transparent:true}));
+numPlane.position.set(0,0.38,-0.196); numPlane.rotation.y=Math.PI; spine.add(numPlane);
+
+function makeArm(sideX){
+  const sh=new THREE.Group(); sh.position.set(sideX,0.57,0); spine.add(sh);
+  const upper=seg(kitMat,0.058,0.05,0.32); sh.add(upper);
+  const elbow=new THREE.Group(); elbow.position.y=-0.32; upper.add(elbow);
+  const fore=seg(skinMat,0.047,0.04,0.30); elbow.add(fore);
+  const hand=new THREE.Mesh(new THREE.SphereGeometry(0.05,10,10), skinMat);
+  hand.position.y=-0.32; fore.add(hand);
+  return {sh, elbow};
+}
+const AL=makeArm(-0.25), AR=makeArm(0.25);
+
+const anim = { run:0 };
+function resetJoints(){
+  for(const j of [L.hip,L.knee,R.hip,R.knee,AL.sh,AL.elbow,AR.sh,AR.elbow,spine,headG,pelvis])
+    j.rotation.set(0,0,0);
+  L.boot.rotation.y=0; R.boot.rotation.y=0;
+  striker.rotation.set(0,0,0);
+  striker.position.y=0;
+}
+function poseIdle(t, nerve=1){
+  resetJoints();
+  const j = (1-nerve);                                 // jitter: 0 = statue, 1 = jelly
+  striker.position.y = Math.sin(t*(2+j*4))*(0.01+j*0.022);
+  spine.rotation.x = 0.04 + Math.sin(t*(2+j*3))*(0.015+j*0.03);
+  headG.rotation.y = j*0.28*Math.sin(t*3.2);           // keeps glancing at you
+  AL.sh.rotation.z = 0.14 + j*0.10*Math.sin(t*7);      // restless arms
+  AR.sh.rotation.z = -0.14 - j*0.10*Math.sin(t*7+1);
+  AL.elbow.rotation.x=-0.35; AR.elbow.rotation.x=-0.35;
+  L.knee.rotation.x = 0.06 + j*0.10*Math.abs(Math.sin(t*5));   // weight shifting
+  R.knee.rotation.x = 0.06 + j*0.10*Math.abs(Math.sin(t*5+2));
+}
+function poseRun(speed, dt){
+  anim.run += dt*speed*9;
+  const s=Math.sin(anim.run), c=Math.cos(anim.run);
+  resetJoints();
+  spine.rotation.x=0.22;
+  L.hip.rotation.x =  s*0.85;
+  R.hip.rotation.x = -s*0.85;
+  L.knee.rotation.x = Math.max(0,-s)*1.35 + 0.15;
+  R.knee.rotation.x = Math.max(0, s)*1.35 + 0.15;
+  AL.sh.rotation.x = -s*0.8;  AR.sh.rotation.x = s*0.8;
+  AL.elbow.rotation.x = -1.5; AR.elbow.rotation.x = -1.5;
+  pelvis.rotation.y = s*0.10;
+  striker.position.y = Math.abs(c)*0.055;
+}
+function poseStutter(t){
+  resetJoints();
+  spine.rotation.x=0.12;
+  L.hip.rotation.x = Math.sin(t*16)*0.28; R.hip.rotation.x = -Math.sin(t*16)*0.28;
+  L.knee.rotation.x=0.5; R.knee.rotation.x=0.5;
+  AL.sh.rotation.z=0.55+Math.sin(t*14)*0.15; AR.sh.rotation.z=-0.55-Math.sin(t*14)*0.15;
+  AL.elbow.rotation.x=-0.8; AR.elbow.rotation.x=-0.8;
+  striker.rotation.z=Math.sin(t*14)*0.06;
+  striker.position.y=Math.abs(Math.sin(t*16))*0.03;
+}
+function poseKick(p){
+  resetJoints();
+  const ft = S.foot || 1;
+  const K = ft>0? R : L;        // kicking leg
+  const P = ft>0? L : R;        // plant leg
+  const BA = ft>0? AL : AR;     // balance arm (opposite the kicking leg)
+  const OA = ft>0? AR : AL;
+  P.hip.rotation.x=-0.18; P.knee.rotation.x=0.35;
+  BA.sh.rotation.set(0.35,0, 0.85*ft); BA.elbow.rotation.x=-0.7;
+  OA.sh.rotation.set(-0.45,0,-0.35*ft); OA.elbow.rotation.x=-0.9;
+  if(p<0.4){
+    const w=p/0.4;
+    K.hip.rotation.x = 0.95*w;
+    K.knee.rotation.x = 1.55*w;
+    spine.rotation.x = 0.10+0.12*w;
+    pelvis.rotation.y = -0.18*w*ft;
+  }else{
+    const w=(p-0.4)/0.6;
+    K.hip.rotation.x = 0.95 - 2.15*w;
+    K.knee.rotation.x = Math.max(0.05, 1.55 - 2.1*w);
+    spine.rotation.x = 0.22 - 0.55*w;
+    pelvis.rotation.y = (-0.18 + 0.5*w)*ft;
+    headG.rotation.x = 0.25*(1-w);
+  }
+}
+
+/* ================= ball ================= */
+const BALL_R=0.11;
+const ballTex=(()=>{const c=document.createElement('canvas');c.width=c.height=256;
+  const g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,256,256);
+  g.fillStyle='#111';
+  for(let i=0;i<12;i++){ g.beginPath();
+    g.arc(30+((i*73)%200), 30+((i*131)%200), 20, 0, Math.PI*2); g.fill(); }
+  return new THREE.CanvasTexture(c);})();
+const ball = new THREE.Mesh(new THREE.SphereGeometry(BALL_R,24,24),
+  new THREE.MeshStandardMaterial({map:ballTex, roughness:.4}));
+ball.castShadow=true; scene.add(ball);
+
+/* ================= full first-person KEEPER rig =================
+   You are a whole goalkeeper, not floating arms: torso, pelvis, two-bone IK arms
+   from the shoulders to your gloves, and two-bone IK legs that crouch in the set
+   position and fling out when the body goes horizontal in a dive. The camera is
+   the keeper's head; every segment hangs off it in a body frame that rotates
+   with the dive, and nothing ever comes near the lens. */
+const gloveMat = new THREE.MeshStandardMaterial({color:0xffd23f, roughness:.5, emissive:0x442f00});
+const gloveGeo = new THREE.SphereGeometry(0.10,18,18);
+const gloveL = new THREE.Mesh(gloveGeo, gloveMat);
+const gloveR = new THREE.Mesh(gloveGeo, gloveMat.clone());
+scene.add(gloveL, gloveR);
+const GLOVE_R = 0.155;
+
+const gkKit   = new THREE.MeshStandardMaterial({color:0x11a86a, roughness:.6});
+const gkBlack = new THREE.MeshStandardMaterial({color:0x0c0c0c, roughness:.8});
+const gkBootM = new THREE.MeshStandardMaterial({color:0xefefe6, roughness:.4});
+function gkTube(mat, r1, r2){
+  const m=new THREE.Mesh(new THREE.CylinderGeometry(r2, r1, 1, 10), mat);
+  m.castShadow=true; scene.add(m); return m;
+}
+const gkTorso=gkTube(gkKit,0.165,0.15);
+const gkUpL=gkTube(gkKit,0.052,0.046), gkUpR=gkTube(gkKit,0.052,0.046);
+const gkFoL=gkTube(gkKit,0.046,0.04),  gkFoR=gkTube(gkKit,0.046,0.04);
+const gkThL=gkTube(gkBlack,0.082,0.07), gkThR=gkTube(gkBlack,0.082,0.07);
+const gkShL=gkTube(gkKit,0.06,0.05),   gkShR=gkTube(gkKit,0.06,0.05);
+const gkPelvis=new THREE.Mesh(new THREE.SphereGeometry(0.155,10,10), gkBlack);
+gkPelvis.scale.set(1.15,0.7,0.9); gkPelvis.castShadow=true; scene.add(gkPelvis);
+const gkBootL=new THREE.Mesh(new THREE.BoxGeometry(0.10,0.075,0.27), gkBootM);
+gkBootL.castShadow=true; scene.add(gkBootL);
+const gkBootR=gkBootL.clone(); scene.add(gkBootR);
+const gkParts=[gkTorso,gkUpL,gkUpR,gkFoL,gkFoR,gkThL,gkThR,gkShL,gkShR,gkPelvis,gkBootL,gkBootR];
+
+const UP = new THREE.Vector3(0,1,0);
+function placeSeg(mesh, from, to){
+  const d = to.clone().sub(from);
+  const len = THREE.MathUtils.clamp(d.length(), 0.05, 1.1);
+  mesh.position.copy(from).addScaledVector(d.normalize(), len*0.5);
+  mesh.quaternion.setFromUnitVectors(UP, d);
+  mesh.scale.set(1, len, 1);
+}
+/* two-bone IK: returns the mid joint (elbow/knee) between `from` and `to` */
+function ik(from, to, l1, l2, bendDir){
+  const d=to.clone().sub(from);
+  let Ln=Math.min(d.length(), l1+l2-0.01);
+  d.normalize();
+  const a=(l1*l1 - l2*l2 + Ln*Ln)/(2*Ln);
+  const h=Math.sqrt(Math.max(0.0004, l1*l1 - a*a));
+  const b=bendDir.clone().addScaledVector(d, -bendDir.dot(d));
+  if(b.lengthSq()<1e-6) b.set(0,0,-1);
+  b.normalize();
+  return from.clone().addScaledVector(d, a).addScaledVector(b, h);
+}
+function setKeeperVisible(v){
+  gloveL.visible=gloveR.visible=v;
+  for(const m of gkParts) m.visible=v;
+}
+
+/* Poses torso/arms/legs from a head position + body roll, using wherever the
+   gloves currently are. Called live every frame, and again by the highlight
+   reel with recorded values — so the replay shows YOUR keeper, gloves and all. */
+const _hd=new THREE.Vector3(), _nk=new THREE.Vector3(), _pv=new THREE.Vector3();
+const _sL=new THREE.Vector3(), _sR=new THREE.Vector3();
+const _hL=new THREE.Vector3(), _hR=new THREE.Vector3();
+const _dn=new THREE.Vector3(), _rt=new THREE.Vector3();
+const _bA=new THREE.Vector3(), _bL=new THREE.Vector3(0,0,-1);
+/* the keeper's body segments double as COLLIDERS so the ball can't fly through you */
+const kSegs=[];
+function pushSeg(a,b,r){ kSegs.push({a:a.clone(), b:b.clone(), r}); }
+function segClosest(p, a, b){
+  const ab=b.clone().sub(a);
+  const t=THREE.MathUtils.clamp(p.clone().sub(a).dot(ab)/Math.max(ab.lengthSq(),1e-8), 0, 1);
+  return a.clone().addScaledVector(ab, t);
+}
+function poseKeeperBody(headX, headY, roll, airborne=false){
+  const th = roll*1.5;
+  const cs=Math.cos(th), sn=Math.sin(th);
+  _dn.set(sn,-cs,0);
+  _rt.set(cs,sn,0);
+  const k = GKP.k || 1;
+  _hd.set(headX, headY, rig.position.z - 0.06);
+  _nk.copy(_hd).addScaledVector(_dn, 0.14*k);
+  _pv.copy(_nk).addScaledVector(_dn, 0.58*k);
+  placeSeg(gkTorso, _nk, _pv);
+  gkPelvis.position.copy(_pv);
+  gkPelvis.rotation.z = th;
+
+  _sL.copy(_nk).addScaledVector(_rt,-0.23*k).addScaledVector(_dn,0.05);
+  _sR.copy(_nk).addScaledVector(_rt, 0.23*k).addScaledVector(_dn,0.05);
+  _bA.set(0,-0.8,-0.6);
+  const AS = GKP.arm/2 + 0.01;
+  const elL = ik(_sL, gloveL.position, AS, AS, _bA);
+  const elR = ik(_sR, gloveR.position, AS, AS, _bA);
+  elL.y=Math.max(elL.y,0.07); elR.y=Math.max(elR.y,0.07);   // elbows never under the turf
+  placeSeg(gkUpL, _sL, elL); placeSeg(gkFoL, elL, gloveL.position);
+  placeSeg(gkUpR, _sR, elR); placeSeg(gkFoR, elR, gloveR.position);
+
+  _pv.y=Math.max(_pv.y,0.17);                     // pelvis never sinks into the turf
+  _hL.copy(_pv).addScaledVector(_rt,-0.10);
+  _hR.copy(_pv).addScaledVector(_rt, 0.10);
+  /* on the ground: feet reach for the turf. Airborne (jump / high dive): legs TUCK —
+     knees up, boots pulled in — instead of stretching down through the pitch. */
+  const legReach = (airborne? 0.52 : 0.84)*k;
+  const ftL=_hL.clone().addScaledVector(_dn,legReach).addScaledVector(_rt,-0.12);
+  const ftR=_hR.clone().addScaledVector(_dn,legReach).addScaledVector(_rt, 0.12);
+  if(airborne){ ftL.z-=0.14; ftR.z-=0.14; }       // heels trail behind the jump
+  ftL.y=Math.max(ftL.y,0.06); ftR.y=Math.max(ftR.y,0.06);
+  const LS = 0.46*k;                          // leg segments grow with stature
+  const knL = ik(_hL, ftL, LS, LS, _bL);
+  const knR = ik(_hR, ftR, LS, LS, _bL);
+  knL.y=Math.max(knL.y,0.07); knR.y=Math.max(knR.y,0.07);   // knees never under the turf
+  placeSeg(gkThL, _hL, knL); placeSeg(gkShL, knL, ftL);
+  placeSeg(gkThR, _hR, knR); placeSeg(gkShR, knR, ftR);
+  gkBootL.position.copy(ftL); gkBootL.position.y+=0.03; gkBootL.position.z-=0.05;
+  gkBootR.position.copy(ftR); gkBootR.position.y+=0.03; gkBootR.position.z-=0.05;
+  gkBootL.rotation.z = gkBootR.rotation.z = th;
+
+  // refresh colliders: torso, arms, legs (radii ≈ the rendered thickness)
+  kSegs.length=0;
+  pushSeg(_nk, _pv, 0.22);
+  pushSeg(_sL, elL, 0.085); pushSeg(elL, gloveL.position, 0.075);
+  pushSeg(_sR, elR, 0.085); pushSeg(elR, gloveR.position, 0.075);
+  pushSeg(_hL, knL, 0.115); pushSeg(knL, ftL, 0.095);
+  pushSeg(_hR, knR, 0.115); pushSeg(knR, ftR, 0.095);
+}
+
+const ctl0 = renderer.xr.getController(0);
+const ctl1 = renderer.xr.getController(1);
+rig.add(ctl0, ctl1);
+
+/* ================= scoreboard ================= */
+const sbCanvas = document.createElement('canvas'); sbCanvas.width=768; sbCanvas.height=256;
+const sbCtx = sbCanvas.getContext('2d');
+const sbTex = new THREE.CanvasTexture(sbCanvas);
+const scoreboard = new THREE.Mesh(new THREE.PlaneGeometry(6,2),
+  new THREE.MeshBasicMaterial({map:sbTex, transparent:true}));
+scoreboard.position.set(0, 4.4, -14); scene.add(scoreboard);
+function drawBoard(line1, line2, color='#ffd23f'){
+  sbCtx.clearRect(0,0,768,256);
+  sbCtx.fillStyle='rgba(6,12,24,0.82)';
+  sbCtx.beginPath(); sbCtx.roundRect(0,0,768,256,28); sbCtx.fill();
+  sbCtx.textAlign='center';
+  sbCtx.fillStyle=color; sbCtx.font='bold 92px system-ui';
+  sbCtx.fillText(line1, 384, 118);
+  sbCtx.fillStyle='#eef3ee'; sbCtx.font='42px system-ui';
+  sbCtx.fillText(line2, 384, 196);
+  sbTex.needsUpdate=true;
+}
+
+/* ================= audio ================= */
+let AC=null;
+function beep(f=880,d=0.12,type='square',vol=0.15,when=0){
+  if(!AC) return;
+  const o=AC.createOscillator(), g=AC.createGain();
+  o.type=type; o.frequency.value=f; g.gain.value=vol;
+  o.connect(g); g.connect(AC.destination);
+  const t0=AC.currentTime+when;
+  o.start(t0); g.gain.setValueAtTime(vol,t0);
+  g.gain.exponentialRampToValueAtTime(0.001, t0+d);
+  o.stop(t0+d);
+}
+function sndWhistle(){
+  beep(2350,.28,'square',.14,0);
+  beep(2350,.5,'square',.14,0.34);
+  beep(2600,.5,'square',.05,0.34);
+}
+const sndKick=(power)=>{beep(power?110:160,.09,'sine',power?0.4:0.3)};
+const sndSave=()=>{beep(520,.1,'triangle',.25); setTimeout(()=>beep(780,.15,'triangle',.25),90)};
+const sndGoal=()=>{beep(300,.3,'sawtooth',.12)};
+const sndPost=()=>{beep(1200,.2,'sine',.3)};
+
+/* crowd: synthesized cheer / groan / an actual BOO */
+function noiseSwell(dur, f1, f2, vol){
+  if(!AC) return;
+  const len=AC.sampleRate*dur, buf=AC.createBuffer(1,len,AC.sampleRate);
+  const d=buf.getChannelData(0);
+  for(let i=0;i<len;i++) d[i]=Math.random()*2-1;
+  const src=AC.createBufferSource(); src.buffer=buf;
+  const bp=AC.createBiquadFilter(); bp.type='bandpass'; bp.Q.value=0.8;
+  bp.frequency.setValueAtTime(f1,AC.currentTime);
+  bp.frequency.linearRampToValueAtTime(f2,AC.currentTime+dur);
+  const g=AC.createGain();
+  g.gain.setValueAtTime(0.001,AC.currentTime);
+  g.gain.linearRampToValueAtTime(vol,AC.currentTime+dur*0.25);
+  g.gain.exponentialRampToValueAtTime(0.001,AC.currentTime+dur);
+  src.connect(bp); bp.connect(g); g.connect(AC.destination);
+  src.start(); src.stop(AC.currentTime+dur);
+}
+function crowdCheer(){ noiseSwell(1.6, 500, 1400, .45); }
+function crowdGroan(){ noiseSwell(1.0, 800, 220, .3); }
+function crowdBoo(){
+  if(!AC) return;
+  /* a "boo" is a sung /u/ vowel: glottal buzz shaped by the vocal tract.
+     Sawtooth source -> two parallel formant filters (F1~310Hz, F2~800Hz for "oo"),
+     falling pitch, many detuned voices with staggered starts = a crowd going BOOO. */
+  const nVoices=9;
+  for(let v=0; v<nVoices; v++){
+    const start = AC.currentTime + Math.random()*0.25;
+    const dur = 1.4 + Math.random()*0.6;
+    const f0 = 105 + Math.random()*55;
+    const o=AC.createOscillator();
+    o.type='sawtooth';
+    o.frequency.setValueAtTime(f0, start);
+    o.frequency.linearRampToValueAtTime(f0*0.78, start+dur);
+    const vib=AC.createOscillator(), vg=AC.createGain();
+    vib.frequency.value=4.5+Math.random()*1.5; vg.gain.value=f0*0.02;
+    vib.connect(vg); vg.connect(o.frequency);
+    const F1=AC.createBiquadFilter(); F1.type='bandpass';
+    F1.frequency.value=310+Math.random()*40; F1.Q.value=9;
+    const F2=AC.createBiquadFilter(); F2.type='bandpass';
+    F2.frequency.value=780+Math.random()*80; F2.Q.value=11;
+    const g1=AC.createGain(); g1.gain.value=1.0;
+    const g2=AC.createGain(); g2.gain.value=0.45;
+    const env=AC.createGain();
+    env.gain.setValueAtTime(0.0001, start);
+    env.gain.linearRampToValueAtTime(0.09, start+0.18);
+    env.gain.setValueAtTime(0.09, start+dur*0.6);
+    env.gain.exponentialRampToValueAtTime(0.0001, start+dur);
+    o.connect(F1); F1.connect(g1); g1.connect(env);
+    o.connect(F2); F2.connect(g2); g2.connect(env);
+    env.connect(AC.destination);
+    vib.start(start); o.start(start);
+    o.stop(start+dur); vib.stop(start+dur);
+  }
+  noiseSwell(1.8, 350, 200, .12);
+}
+function crowdReact(result){
+  if(crowdMode==='home'){
+    if(result==='goal') crowdGroan(); else crowdCheer();
+  }else if(crowdMode==='away'){
+    if(result==='goal') crowdCheer(); else crowdBoo();
+  }
+}
+
+/* ================= difficulty =================
+   EASY = readable arcade pace. PRO = a mixed bag: some slow, some near-real, you never
+   know which. LEGEND = full real speed (0.40–0.52s over 11m, ~77–100 km/h): flight is
+   shorter than reaction + dive, so you commit off the run-up read like a real keeper. */
+const DIFF = {
+  easy:   {label:'EASY',   Tmin:0.85, Tmax:1.05, spread:2.5, corner:0.45, curve:3.5, powerP:0.18, techP:0.30, trickP:0.05, stutterP:0.05, missP:0.12, lieP:0.00},
+  pro:    {label:'PRO',    Tmin:0.46, Tmax:0.82, spread:3.0, corner:0.62, curve:6.0, powerP:0.30, techP:0.32, trickP:0.18, stutterP:0.12, missP:0.08, lieP:0.18},
+  legend: {label:'LEGEND', Tmin:0.40, Tmax:0.52, spread:3.4, corner:0.82, curve:9.0, powerP:0.32, techP:0.32, trickP:0.25, stutterP:0.11, missP:0.05, lieP:0.35},
+};
+let diffKey='pro', mode='shootout';
+
+/* ================= game state ================= */
+const TOTAL=5;
+const S = { phase:'menu', shot:0, faced:0, saves:0, results:[], t:0,
+  vel:new THREE.Vector3(), curveAcc:new THREE.Vector3(),
+  knuckle:0, shooter:'normal', fake:false, fakeDone:false, fakeAt:0, fakeHold:0,
+  runFrom:new THREE.Vector3(), runTo:new THREE.Vector3(), runDur:1.4,
+  kickT:0, plan:null, tell:0, speedKmh:0, shotResolved:false,
+  trace:[], records:[], kFrame:null };
+const H = {i:0, t:0, cam:1};   // 1 = centre field (default)
+
+/* a dive commits you: 0.3s out, 0.55s on the ground / at full stretch, 0.9s to get
+   back up. You do NOT spring back to your feet instantly. */
+const dive = {active:false, dirX:0, dirY:0, t:0, OUT:0.30, HOLD:0.55, REC:0.90, reachX:2.45, reachUp:0.9};
+function diveShape(t){
+  if(t < dive.OUT){ const u=t/dive.OUT; return 1-(1-u)*(1-u); }           // explode out
+  if(t < dive.OUT+dive.HOLD) return 1;                                     // grounded
+  const u=(t-dive.OUT-dive.HOLD)/dive.REC;                                 // climb back up
+  return 1 - (u<0.5 ? 2*u*u : 1-Math.pow(-2*u+2,2)/2);
+}
+
+const drag = {on:false, sx:0, sy:0, px:0, py:0};
+const stretch = {x:0, y:0};
+const lean = {x:0, y:0};        // committed body weight (has momentum)
+let offBalance = 0;             // >0: weight is mid-transfer, you CANNOT dive
+const handS = {x:0, y:0};       // smoothed hand position
+
+const hud=document.getElementById('hud'), msg=document.getElementById('msg'),
+      dots=document.getElementById('dots'), panel=document.getElementById('panel'),
+      cross=document.getElementById('crosshair'), keysEl=document.getElementById('keys');
+for(let i=0;i<TOTAL;i++){const d=document.createElement('div');d.className='dot';dots.appendChild(d);}
+
+function setMsg(text,color){ msg.textContent=text; msg.style.color=color||'#fff';
+  msg.style.opacity= text? 1:0; }
+function refreshHUD(){
+  document.getElementById('sSaves').textContent=S.saves;
+  document.getElementById('sDiff').textContent=DIFF[diffKey].label;
+  if(mode==='practice'){
+    dots.style.display='none';
+    document.getElementById('sShot').textContent=S.faced;
+    document.getElementById('sShotLbl').textContent='Faced';
+  }else{
+    dots.style.display='flex';
+    document.getElementById('sShot').textContent=`${Math.min(S.shot+1,TOTAL)}/${TOTAL}`;
+    document.getElementById('sShotLbl').textContent='Shot';
+    [...dots.children].forEach((d,i)=>{ d.className='dot'+(S.results[i]?' '+S.results[i]:''); });
+  }
+}
+
+let forcedShooter=null;
+function pickShooter(){
+  if(forcedShooter) return forcedShooter;
+  const D=DIFF[diffKey], r=Math.random();
+  if(r < D.powerP) return 'power';
+  if(r < D.powerP + D.techP) return 'tech';
+  if(r < D.powerP + D.techP + D.trickP) return 'trick';
+  if(r < D.powerP + D.techP + D.trickP + D.stutterP) return 'stutter';
+  return 'normal';
+}
+
+function startShot(){
+  S.phase='set'; S.t=0; S.kickT=0; S.shotResolved=false; S.stutterFlinch=false;
+  /* every kicker is a different human: roll his nerve for this penalty.
+     Nervy takers fidget while settling (watch him at the spot!), miss more,
+     and are far more likely to flinch if you stand your ground. Ice-cold
+     takers give you almost nothing. */
+  S.psych = { nerve: Math.random() };
+  S.foot = footMode==='right'? 1 : footMode==='left'? -1 : (Math.random()<0.75? 1 : -1);  // ~75% right-footed, like reality
+  S.shooter = pickShooter();
+  S.fake = (S.shooter==='trick');
+  S.fakeDone=false;
+  S.fakeAt = 0.55 + Math.random()*0.2;
+  S.fakeHold = 0.35 + Math.random()*0.55;
+  kitMat.color.setHex(kitTell ? KIT[S.shooter] : 0xc9c9c9);   // hidden = anonymous grey, read the run-up only
+  ball.position.set(0, BALL_R, -11);
+  ball.visible=true;
+  setKeeperVisible(!renderer.xr.isPresenting);
+  planShot();                                 // he decides the shot first…
+  /* …then his APPROACH ANGLE leaks it (research cue #3): shots to the natural
+     inside-foot side come off a wider, more angled run ~70% of the time. */
+  const naturalSign = S.foot;                 // right-footer's inside push = his left
+  const toNatural = Math.sign(S.plan.target.x||naturalSign) === naturalSign;
+  let mag;
+  if(Math.random()<0.70) mag = toNatural ? 1.5+Math.random()*1.0 : 0.55+Math.random()*0.5;
+  else                   mag = 0.6+Math.random()*1.6;             // 30%: uninformative
+  if(S.shooter==='tech') mag = Math.max(mag, 2.0)+0.4;            // benders always arc in
+  S.runFrom.set(S.foot*mag, 0, -14.8);
+  S.runTo.set(0.32*Math.sign(S.runFrom.x), 0, -11.55);
+  S.runDur = S.shooter==='power'? 0.95 : S.shooter==='stutter'? 1.75 : 1.35;
+  striker.position.copy(S.runFrom);
+  striker.visible=true;
+  anim.run=0;
+  const label = mode==='practice'? `PRACTICE · ${S.faced+1}` : `SHOT ${S.shot+1} / ${TOTAL}`;
+  drawBoard(label, `${DIFF[diffKey].label} · Saves: ${S.saves}`);
+  setMsg('');
+  refreshHUD();
+  // reset the keeper: back on his line, no leftover dive/strain from the last shot
+  dive.active=false; dive.dirX=0; dive.dirY=0; dive.t=0;
+  drag.on=false; drag.sx=0; drag.sy=0;
+  stretch.x=0; stretch.y=0; lean.x=0; lean.y=0; offBalance=0;
+  S.trace=[];
+  sndWhistle();
+  if(crowdMode==='away' && Math.random()<0.45) setTimeout(crowdBoo, 400);
+}
+
+function planShot(){
+  const D=DIFF[diffKey];
+  let T;
+  if(diffKey==='pro'){
+    T = THREE.MathUtils.lerp(D.Tmax, D.Tmin, Math.random());     // true mixture of speeds
+  }else{
+    const prog = mode==='practice'? Math.min(S.faced/8,1) : S.shot/(TOTAL-1);
+    T = THREE.MathUtils.lerp(D.Tmax, D.Tmin, prog) * (0.94+Math.random()*0.12);
+  }
+  let curveMag = 0, knuckle = 0;
+  let tx, ty;
+
+  function placedX(spread){
+    const side = Math.random()<0.5? -1:1;
+    return Math.random() < D.corner
+      ? side*(spread*0.72 + Math.random()*spread*0.28)
+      : side*(Math.random()*spread*0.6);
+  }
+
+  if(S.shooter==='power'){
+    T *= 0.78;
+    tx = placedX(Math.min(D.spread,2.7));
+    ty = 0.4 + Math.random()*1.6;
+    knuckle = 2.4;
+  }else if(S.shooter==='tech'){
+    const side = S.foot;                        // inside-of-the-boot whip
+    tx = -side*(2.4+Math.random()*0.9);
+    ty = Math.random()<0.5? 0.35+Math.random()*0.5 : 1.5+Math.random()*0.8;
+    curveMag = -side*(D.curve*(0.7+Math.random()*0.5));
+  }else if(S.shooter==='trick'){
+    if(Math.random()<0.35){
+      T = 0.95 + Math.random()*0.20;   // real Panenka: ~1s of float, apex ≈ 2.2m
+      tx = (Math.random()*2-1)*0.5;
+      ty = 1.1 + Math.random()*0.6;
+    }else{
+      tx = placedX(D.spread);
+      ty = 0.3 + Math.random()*1.3;
+    }
+  }else if(S.shooter==='stutter'){
+    tx = placedX(D.spread);              // placeholder — overwritten at contact
+    ty = 0.35 + Math.random()*1.2;
+  }else{
+    tx = placedX(D.spread);
+    ty = 0.3 + Math.random()*1.5;
+  }
+
+  const off = Math.random() < D.missP * (1.5 - 0.9*S.psych.nerve);
+  const target = new THREE.Vector3(
+    off? (Math.sign(tx)||1)*(3.9+Math.random()) : THREE.MathUtils.clamp(tx,-3.45,3.45),
+    off? ty + (Math.random()<0.5?0:2.7) : Math.min(ty,2.32),
+    0.15);
+  S.plan = {T, target, curveMag, knuckle};
+
+  const trueSide = Math.abs(target.x)<0.6 ? 0 : Math.sign(target.x);
+  S.trueSide = trueSide;
+  const lieP = S.shooter==='trick' ? 0.5 : D.lieP;
+  if(S.shooter==='stutter'){
+    S.tellHip=0; S.tellPlant=0; S.tellGaze=0;         // nothing decided = nothing leaked
+  }else{
+    // hips & gaze: the channels takers CAN lie with (difficulty-scaled)
+    S.tellHip  = Math.random()<lieP ? -trueSide : trueSide;
+    S.tellGaze = Math.random()<Math.min(lieP*1.6,0.6) ? -trueSide : trueSide;  // gaze lies most
+    // plant foot: biomechanically hard to fake — honest ~85% (trickster ~70%)
+    const plantHonesty = S.shooter==='trick' ? 0.70 : 0.85;
+    S.tellPlant = Math.random()<plantHonesty ? trueSide : -trueSide;
+  }
+  S.tell = S.tellHip;                                  // legacy field (lean-read, replays)
+}
+
+function launchBall(){
+  /* the stutter runner decides at the last step: if you've committed (dive or
+     visible lean), he rolls it the other side; if you've held your nerve, he
+     picks a corner — or dinks it centre where an S-block eats it. */
+  if(S.shooter==='stutter'){
+    const kdir = dive.active ? dive.dirX : primedDir().x;
+    if(kdir!==0){
+      S.plan.target.x = -kdir*(2.3+Math.random()*1.0);
+      S.plan.target.y = 0.35+Math.random()*1.0;
+    }else{
+      /* the whole stutter act NEEDS the keeper to move. When you stand there
+         composed, the pressure flips onto him — a real chance he snatches at
+         it and drags it wide or balloons it over. */
+      const flinchP = 0.05 + (1 - S.psych.nerve)*0.45;
+      const r=Math.random();
+      if(r<flinchP){
+        S.stutterFlinch = true;
+        S.plan.target.x = (Math.random()<0.5?-1:1)*(3.9+Math.random()*0.9);
+        if(Math.random()<0.45) S.plan.target.y = 2.7+Math.random()*0.9;   // over the bar
+        else S.plan.target.y = 0.4+Math.random()*1.0;                      // dragged wide
+      }else if(r<flinchP+0.22){
+        S.plan.target.x = (Math.random()*2-1)*0.5;    // centre dink — stay big / S-block
+        S.plan.target.y = 0.4+Math.random()*0.6;
+      }
+      // else: he picks his planned corner blind
+    }
+  }
+  const {T, target, curveMag, knuckle} = S.plan;
+  const p0 = ball.position.clone();
+  S.curveAcc.set(curveMag, 0, 0);
+  S.knuckle = knuckle;
+  S.vel.set(
+    (target.x-p0.x)/T - 0.5*curveMag*T,
+    (target.y-p0.y)/T + 0.5*9.81*T,
+    (target.z-p0.z)/T);
+  S.speedKmh = Math.round(S.vel.length()*3.6);
+  S.phase='flight'; S.t=0;
+  sndKick(S.shooter==='power');
+  const d=primedDir();                            // primed direction commits at contact…
+  if((d.x||d.y) && !d.fake && !dive.active) startDive(d.x, d.y);   // …unless it was a feint
+}
+
+function resolve(result, blocked=false){
+  if(S.shotResolved) return;
+  S.shotResolved=true;
+  S.faced++;
+  if(mode!=='practice'){
+    S.results[S.shot]=result;
+    S.records.push({trace:S.trace, result, speedKmh:S.speedKmh, kit:(kitTell?KIT[S.shooter]:0xc9c9c9),
+                    runTo:S.runTo.clone(), tell:S.tell, shooter:S.shooter, foot:S.foot});
+  }
+  crowdReact(result);
+  const kmh = `${S.speedKmh} km/h`;
+  if(result==='save'){ S.saves++; sndSave();
+    const word = blocked? 'BLOCKED!':'SAVED!';
+    setMsg(word,'#ffd23f'); drawBoard(word,`${kmh} · Saves: ${S.saves}`,'#ffd23f'); pulse(); }
+  else if(result==='goal'){ sndGoal(); setMsg('GOAL','#ff5252'); drawBoard('GOAL',`${kmh} · Saves: ${S.saves}`,'#ff5252'); }
+  else if(result==='post'){ sndPost(); setMsg('POST!','#ffd23f'); drawBoard('OFF THE POST!',`${kmh} · Saves: ${S.saves}`,'#ffd23f'); }
+  else { setMsg('WIDE!','#7fd1ff'); drawBoard('WIDE!',`${kmh} · Saves: ${S.saves}`,'#7fd1ff'); }
+  refreshHUD();
+  setTimeout(()=>{
+    if(S.phase==='menu') return;
+    if(mode==='practice'){ startShot(); return; }
+    S.shot++;
+    if(S.shot>=TOTAL) startHighlights();
+    else startShot();
+  }, 1600);
+}
+
+/* ---- highlight reel: replays each recorded shot in slow-mo from a broadcast angle ---- */
+let showHighlights=true;
+function startHighlights(){
+  if(!showHighlights || !S.records.length){ finish(); return; }
+  S.phase='highlights';
+  H.i=0;
+  rig.position.set(0,0,-0.12);
+  setKeeperVisible(true);                     // the replay shows YOUR keeper too
+  striker.visible=true; ball.visible=true;
+  setMsg('HIGHLIGHTS','#ffd23f');
+  setTimeout(()=>{ if(S.phase==='highlights') setMsg(''); }, 1100);
+  setupHighlight();
+}
+function setupHighlight(){
+  const r=S.records[H.i];
+  kitMat.color.setHex(r.kit);
+  S.foot = r.foot || 1;
+  striker.position.copy(r.runTo);
+  poseKick(1);
+  striker.lookAt(0, striker.position.y+1, 0);
+  if(r.tell) striker.rotation.y += r.tell*0.3;
+  ball.position.set(0, BALL_R, -11);
+  H.t=0;
+  const name={save:'SAVED',goal:'GOAL',post:'OFF THE POST',miss:'WIDE'}[r.result];
+  const col ={save:'#ffd23f',goal:'#ff5252',post:'#ffd23f',miss:'#7fd1ff'}[r.result];
+  drawBoard(`HIGHLIGHT ${H.i+1}/${S.records.length}`, `${name} · ${r.speedKmh} km/h — 1-5 camera · click skips`, col);
+}
+function stepHighlights(dt){
+  camera.rotation.z=0;
+  switch(H.cam){
+    case 2: camera.position.set(8.2, 3.0, -5.4); camera.lookAt(0, 1.1, -1);   break;  // broadcast side
+    case 3: camera.position.set(0, 2.2, -16.5);  camera.lookAt(0, 1.2, 0);    break;  // centre field, behind the taker
+    case 4: camera.position.set(0, 15.0, -5.0);  camera.lookAt(0, 0, -4.9);   break;  // tactical top-down
+    case 5:  camera.position.set(0, EYE, 0.9);   camera.lookAt(0, 1.0, -11);   break;  // GK's eyes, tight
+    default: camera.position.set(0, 4.6, 10.5);  camera.lookAt(0, 1.2, -8);            // long view from the keeper's end: whole duel in frame
+  }
+  const r=S.records[H.i], tr=r.trace;
+  H.t += dt*0.5;
+  if(!tr.length){ H.t=99; }
+  else{
+    let j=0;
+    while(j<tr.length-1 && tr[j+1].t<=H.t) j++;
+    const a=tr[j], b=tr[Math.min(j+1,tr.length-1)];
+    const f=Math.min((b.t>a.t)? (H.t-a.t)/(b.t-a.t) : 0, 1);
+    const lp=(u,v)=>u+(v-u)*f;
+    const pz0 = ball.position.z;
+    ball.position.set(lp(a.p[0],b.p[0]), lp(a.p[1],b.p[1]), lp(a.p[2],b.p[2]));
+    if(pz0 <= 1.45 && ball.position.z > 1.45 && Math.abs(ball.position.x)<GOAL_W/2 && ball.position.y<GOAL_H+0.2){
+      punchNet(ball.position.x, ball.position.y, 5);
+    }
+    // replay the keeper: gloves + body exactly as they moved
+    if(a.gl && b.gl){
+      gloveL.position.set(lp(a.gl[0],b.gl[0]), lp(a.gl[1],b.gl[1]), lp(a.gl[2],b.gl[2]));
+      gloveR.position.set(lp(a.gr[0],b.gr[0]), lp(a.gr[1],b.gr[1]), lp(a.gr[2],b.gr[2]));
+      poseKeeperBody(lp(a.k.hx,b.k.hx), lp(a.k.hy,b.k.hy), lp(a.k.roll,b.k.roll), a.k.air||b.k.air);
+    }
+  }
+  const endT = tr.length? tr[tr.length-1].t : 0;
+  if(H.t > endT + 0.5){
+    H.i++;
+    if(H.i>=S.records.length) finish();
+    else setupHighlight();
+  }
+}
+
+function finish(){
+  S.phase='over';
+  camera.position.set(0,EYE,0);
+  camera.rotation.set(0,0,0);
+  striker.visible=false; ball.visible=false;
+  setKeeperVisible(false);
+  const verdict = S.saves>=4?'WALL OF STEEL': S.saves>=3?'HERO KEEPER':
+                  S.saves>=2?'SOLID GLOVES':'UNLUCKY';
+  setMsg('');
+  drawBoard(verdict, `${S.saves} / ${TOTAL} on ${DIFF[diffKey].label} — trigger / click to replay`);
+}
+
+function restart(){ S.shot=0; S.faced=0; S.saves=0; S.results=[]; S.records=[]; startShot(); }
+
+function pulse(){
+  const session=renderer.xr.getSession && renderer.xr.getSession();
+  if(!session) return;
+  for(const src of session.inputSources){
+    src.gamepad?.hapticActuators?.[0]?.pulse(0.8, 120);
+  }
+}
+
+/* ================= input ================= */
+let inVR=false;
+const mouse=new THREE.Vector2(0,0);
+addEventListener('mousemove', e=>{
+  mouse.x=(e.clientX/innerWidth)*2-1;
+  mouse.y=-(e.clientY/innerHeight)*2+1;
+  cross.style.transform=`translate(${e.clientX}px,${e.clientY}px)`;
+  if(drag.on){
+    if((e.buttons & 1)===0){                    // button released outside the window
+      drag.on=false; drag.sx=0; drag.sy=0;
+    }else{
+      drag.sx = THREE.MathUtils.clamp((e.clientX-drag.px)/(innerWidth*0.22), -1, 1);
+      drag.sy = THREE.MathUtils.clamp((drag.py-e.clientY)/(innerHeight*0.30), -0.4, 1);
+    }
+  }
+});
+addEventListener('mousedown', e=>{
+  if(S.phase==='highlights'){ finish(); return; }
+  if(S.phase==='over'){ restart(); return; }
+  drag.on=true; drag.px=e.clientX; drag.py=e.clientY;
+});
+addEventListener('mouseup', ()=>{ drag.on=false; drag.sx=0; drag.sy=0; });
+addEventListener('blur', ()=>{ held.clear(); drag.on=false; drag.sx=0; drag.sy=0; });
+document.addEventListener('visibilitychange', ()=>{ if(document.hidden){ held.clear(); drag.on=false; drag.sx=0; drag.sy=0; } });
+
+function startDive(x,y){
+  if(dive.active) return;
+  if(offBalance>0) return;                    // weight mid-transfer: you physically can't
+  dive.active=true; dive.dirX=x; dive.dirY=y; dive.t=0;
+}
+/* laws of the game: you hold your line until the ball is struck. Holding a
+   direction before contact PRIMES it — you lean that way, and the dive fires
+   automatically the instant the ball is kicked. */
+function primedDir(){
+  let x=0, y=0;
+  if(held.has('a')||held.has('q')) x=-1;
+  else if(held.has('d')||held.has('e')) x=1;
+  if(held.has('w')||held.has('q')||held.has('e')) y=1;   // high
+  else if(held.has('s')) y=-1;                            // low (with A/D) or collapse (alone)
+  return {x, y, fake: held.has('shift')};                 // Shift = FEINT, don't commit
+}
+const held = new Set();
+let pendingDive = null;
+function normKey(k){
+  if(k==='arrowleft') return 'a';
+  if(k==='arrowright') return 'd';
+  if(k==='arrowup') return 'w';
+  if(k==='arrowdown') return 's';
+  return k;   // 'shift' passes through as itself
+}
+addEventListener('keydown', e=>{
+  let k=normKey(e.key.toLowerCase());
+  if(k==='escape' && S.phase!=='menu'){ S.phase='menu'; panel.style.display='flex';
+    hud.style.display='none'; cross.style.display='none'; keysEl.classList.remove('on');
+    striker.visible=false; ball.visible=false; setKeeperVisible(false); setMsg('');
+    camera.position.set(0,EYE,0); camera.rotation.set(0,0,0); return; }
+  if(S.phase==='highlights' && (k==='1'||k==='2'||k==='3'||k==='4'||k==='5')){
+    H.cam = +k;
+    return;
+  }
+  if(k==='k'){
+    kitTell=!kitTell;
+    const lbl='KIT TELL: '+(kitTell?'ON':'HIDDEN');
+    setMsg(lbl, kitTell?'#eef3ee':'#ffd23f');
+    setTimeout(()=>{ if(msg.textContent===lbl) setMsg(''); }, 900);
+    return;
+  }
+  if(k==='l'||k==='r'||k==='m'){
+    footMode = k==='l'? 'left' : k==='r'? 'right' : 'mixed';
+    const lbl='FOOT: '+footMode.toUpperCase();
+    setMsg(lbl,'#eef3ee');
+    setTimeout(()=>{ if(msg.textContent===lbl) setMsg(''); }, 900);
+    return;
+  }
+  if(k==='1'||k==='2'||k==='3'||k==='4'||k==='0'){
+    forcedShooter = k==='1'? 'power' : k==='2'? 'tech' : k==='3'? 'trick' : k==='4'? 'stutter' : null;
+    const label = forcedShooter? {power:'POWER NEXT',tech:'BENDER NEXT',trick:'TRICKSTER NEXT',stutter:'STUTTER RUN NEXT'}[forcedShooter] : 'RANDOM SHOOTERS';
+    const col = forcedShooter? {power:'#ff6b6b',tech:'#6bb8ff',trick:'#c98bff',stutter:'#ffb066'}[forcedShooter] : '#eef3ee';
+    setMsg(label, col);
+    setTimeout(()=>{ if(msg.textContent===label) setMsg(''); }, 900);
+    return;
+  }
+  if(k!=='a'&&k!=='d'&&k!=='w'&&k!=='s'&&k!=='q'&&k!=='e'&&k!=='shift') return;
+  held.add(k);
+  if(k==='shift') return;                        // shift only modifies, never dives
+  if(S.phase!=='flight') return;                 // before contact you can only prime
+  if(dive.active || pendingDive) return;
+  pendingDive = setTimeout(()=>{
+    pendingDive=null;
+    if(S.phase!=='flight' || dive.active) return;
+    const d=primedDir();
+    if(d.x||d.y) startDive(d.x, d.y);
+  }, 60);
+});
+addEventListener('keyup', e=>{ held.delete(normKey(e.key.toLowerCase())); });
+ctl0.addEventListener('selectstart', ()=>{ if(S.phase==='over') restart(); });
+ctl1.addEventListener('selectstart', ()=>{ if(S.phase==='over') restart(); });
+
+/* ================= menu ================= */
+document.querySelectorAll('#diffRow .pick').forEach(b=>{
+  b.onclick=()=>{ document.querySelectorAll('#diffRow .pick').forEach(x=>x.classList.remove('sel'));
+    b.classList.add('sel'); diffKey=b.dataset.d; };
+});
+document.querySelectorAll('#modeRow .pick').forEach(b=>{
+  b.onclick=()=>{ document.querySelectorAll('#modeRow .pick').forEach(x=>x.classList.remove('sel'));
+    b.classList.add('sel'); mode=b.dataset.m; };
+});
+document.querySelectorAll('#hlRow .pick').forEach(b=>{
+  b.onclick=()=>{ document.querySelectorAll('#hlRow .pick').forEach(x=>x.classList.remove('sel'));
+    b.classList.add('sel'); showHighlights = b.dataset.h==='on'; };
+});
+let footMode='mixed';
+let kitTell=true;
+const gkSlider=document.getElementById('gkSlider'), gkHLabel=document.getElementById('gkHLabel');
+function gkTag(){ return gkH<=188? 'agile' : gkH<=198? 'balanced' : 'reach'; }
+gkSlider.oninput=()=>{
+  gkH = +gkSlider.value;
+  gkHLabel.textContent = `${gkH} cm · ${gkTag()}`;
+  applyGK();
+};
+
+
+const btnVR=document.getElementById('btnVR');
+if(navigator.xr){
+  navigator.xr.isSessionSupported('immersive-vr').then(ok=>{
+    btnVR.disabled=!ok;
+    btnVR.textContent= ok? 'Enter VR':'VR not available';
+  }).catch(()=>{ btnVR.textContent='VR not available'; });
+}else btnVR.textContent='VR not available';
+
+btnVR.onclick=async ()=>{
+  try{
+    const session=await navigator.xr.requestSession('immersive-vr',
+      {optionalFeatures:['local-floor','bounded-floor','hand-tracking']});
+    session.addEventListener('end', ()=>{ inVR=false; });
+    await renderer.xr.setSession(session);
+    inVR=true;
+    begin();
+  }catch(e){ btnVR.textContent='VR failed: '+e.message; }
+};
+document.getElementById('btnFlat').onclick=()=>{ begin(); };
+
+function begin(){
+  AC = AC || new (window.AudioContext||window.webkitAudioContext)();
+  panel.style.display='none';
+  hud.style.display='flex';
+  if(!inVR){
+    cross.style.display='block';
+    keysEl.classList.add('on');
+    keysEl.classList.remove('dim');
+    clearTimeout(keysEl._t);
+    keysEl._t = setTimeout(()=>keysEl.classList.add('dim'), 9000);
+  }
+  applyGK();
+  applyCrowd();
+  restart();
+}
+
+/* ================= main loop ================= */
+const clock=new THREE.Clock();
+const tmpA=new THREE.Vector3();
+
+renderer.setAnimationLoop(()=>{
+  const dt=Math.min(clock.getDelta(), 0.033);
+
+  /* ----- keeper ----- */
+  if(renderer.xr.isPresenting){
+    const session=renderer.xr.getSession();
+    if(session){
+      for(const src of session.inputSources){
+        const ax = src.gamepad?.axes;
+        if(ax && ax.length>=4 && Math.abs(ax[2])>0.15){
+          rig.position.x = THREE.MathUtils.clamp(rig.position.x + ax[2]*2.4*dt, -3.2, 3.2);
+        }
+      }
+    }
+    if(gkTorso.visible) setKeeperVisible(false);   // in VR your body is the body
+    gloveL.visible=gloveR.visible=true;
+    ctl0.getWorldPosition(gloveL.position);
+    ctl1.getWorldPosition(gloveR.position);
+  }else if(S.phase!=='over' && S.phase!=='menu' && S.phase!=='highlights'){
+    let dx=0, dy=0, roll=0, diveS=0;
+
+    if(dive.active){
+      dive.t+=dt;
+      diveS=diveShape(dive.t);
+      /* three dive heights per side (A/D full stretch · S+A/D low · W+A/D high),
+         and then GRAVITY: every lateral dive LANDS. After the launch the body
+         drops to the turf and lies there through the hold, head ~30cm off the
+         grass, near-horizontal — then pushes back up through the recovery. */
+      const reach = dive.dirY<0 ? 1.95 : dive.dirY>0 ? 2.0 : dive.reachX;
+      dx = dive.dirX * reach * diveS;
+      // airborne pose of the dive itself
+      const dyAir = dive.dirY>0 ? (dive.dirX!==0 ? GKP.jump+0.06 : GKP.jump)*diveS
+                  : dive.dirY<0 ? (dive.dirX!==0 ? -0.88 : -0.62)*diveS
+                  : (dive.dirX!==0 ? -0.40*diveS : 0);
+      const rollAir = -dive.dirX * (dive.dirY>0? 0.45 : dive.dirY<0? 0.85 : 0.65) * diveS;
+      // where the body ends up on the ground
+      const dyGround = dive.dirX!==0 ? -(EYE-0.30)          // lying: head 30cm up
+                     : dive.dirY<0   ? -(EYE-0.60)          // collapsed on haunches
+                     : 0;                                   // vertical jump lands standing
+      const rollGround = dive.dirX!==0 ? -dive.dirX*1.05 : 0;   // flat on the turf
+      // ground influence: none while launching, full ~0.22s after, fades as you push up
+      let g = 0;
+      if(dive.t > dive.OUT) g = Math.min((dive.t-dive.OUT)/0.22, 1);
+      if(dive.t > dive.OUT+dive.HOLD) g = Math.min(g, diveS);
+      dy   = dyAir*(1-g)   + dyGround*g;
+      roll = rollAir*(1-g) + rollGround*g;
+      if(dive.t>=dive.OUT+dive.HOLD+dive.REC){ dive.active=false; dive.dirX=0; dive.dirY=0; }
+    }
+
+    stretch.x += (drag.sx - stretch.x) * Math.min(1, dt*10);
+    stretch.y += (drag.sy - stretch.y) * Math.min(1, dt*10);
+    roll += -stretch.x * 0.3;
+
+    // standby lean: your weight COMMITS. It shifts out in ~0.2s but takes ~0.5s
+    // to bring back — release the key and you still have to travel home. If the
+    // trickster baited your lean, that recovery time is exactly what he bought.
+    {
+      const pd = (!dive.active && (S.phase==='set'||S.phase==='runup')) ? primedDir() : {x:0,y:0,fake:false};
+      const sell = pd.fake? 1.25 : 1.0;
+      const tX = pd.x*0.30*sell;
+      const tY = pd.y*0.10 - (pd.x&&!pd.y ? 0.10 : 0);
+      // reversing a committed lean puts you OFF BALANCE: no diving mid-transfer.
+      // No free "oops, other way" — a wrong lean is a wrong lean.
+      if(Math.abs(lean.x)>0.10 && tX!==0 && Math.sign(tX)!==Math.sign(lean.x)){
+        offBalance = Math.max(offBalance, 0.45/GKP.agil);
+      }
+      offBalance = Math.max(0, offBalance - dt);
+      // out = fast; coming back / switching = slow (agility-scaled)
+      const rX = (tX!==0 && Math.abs(tX)>=Math.abs(lean.x) && Math.sign(tX)===(Math.sign(lean.x)||Math.sign(tX))) ? 6*GKP.agil : 2.2*GKP.agil;
+      const rY = (tY!==0 && Math.abs(tY)>=Math.abs(lean.y) && Math.sign(tY)===(Math.sign(lean.y)||Math.sign(tY))) ? 6*GKP.agil : 2.2*GKP.agil;
+      lean.x += (tX-lean.x)*Math.min(1, dt*rX);
+      lean.y += (tY-lean.y)*Math.min(1, dt*rY);
+      dx += lean.x;
+      dy += lean.y;
+      roll += -lean.x*0.4;
+    }
+
+    const bodyX = dx + stretch.x*0.45;
+    const bodyY = EYE + dy + stretch.y*0.22 - Math.abs(stretch.x)*0.1;
+    camera.position.x = bodyX;
+    camera.position.y = bodyY;
+    camera.rotation.z = roll;
+
+    /* hands: mouse steers them inside true arm's reach; a dive throws them along
+       the dive. Then each glove is HARD-CLAMPED to 0.70m from its own shoulder —
+       arms cannot stretch. Distance saves come from the body travelling. */
+    // the reachable circle scales with your arm: a 210cm keeper's hands roam
+    // a visibly wider envelope than a 180cm keeper's
+    const armR = GKP.arm || 0.70;
+    let hxT = mouse.x*(armR*0.90) + stretch.x*0.30;
+    let hyT = mouse.y*(armR*0.80) + stretch.y*0.30;
+    const rLim = armR*0.90 + Math.abs(stretch.x)*0.18 + Math.abs(stretch.y)*0.15;
+    const rrT = Math.hypot(hxT,hyT);
+    if(rrT>rLim){ hxT*=rLim/rrT; hyT*=rLim/rrT; }
+    handS.x += (hxT-handS.x)*Math.min(1, dt*14);
+    handS.y += (hyT-handS.y)*Math.min(1, dt*14);
+    let hx = handS.x, hy = handS.y;
+    if(diveS>0){
+      const throwX = dive.dirX * 0.9 * diveS;
+      const throwY = dive.dirY>0 ?  0.7*diveS :
+                     dive.dirY<0 ? (dive.dirX!==0 ? -0.6 : -0.7)*diveS :
+                     (dive.dirX!==0 ? -0.12*diveS : 0);   // full stretch: arms out at mid height
+      hx = hx*0.40 + throwX;
+      hy = hy*0.60 + throwY;      // strong height control mid-dive: aim at the ball
+    }
+    const chestY = bodyY - 0.25;
+    const gy = THREE.MathUtils.clamp(chestY + hy, 0.12, 2.6);
+    const gxc = rig.position.x + bodyX + hx;
+    gloveL.position.set(gxc - 0.22, gy,        rig.position.z - 0.42);
+    gloveR.position.set(gxc + 0.22, gy + 0.02, rig.position.z - 0.42);
+
+    // shoulder positions in the (possibly rotated) body frame, then clamp reach
+    {
+      const th0=roll*1.5, cs0=Math.cos(th0), sn0=Math.sin(th0);
+      const nkX = rig.position.x + bodyX + sn0*0.14;
+      const nkY = bodyY - cs0*0.14;
+      const shZ = rig.position.z - 0.06;
+      const ARM = GKP.arm;
+      const clampGlove=(g, sx)=>{
+        const shx = nkX + cs0*sx + sn0*0.05;
+        const shy = nkY + sn0*sx - cs0*0.05;
+        const vx=g.position.x-shx, vy=g.position.y-shy, vz=g.position.z-shZ;
+        const d=Math.hypot(vx,vy,vz);
+        if(d>ARM){
+          const k=ARM/d;
+          g.position.set(shx+vx*k, shy+vy*k, shZ+vz*k);
+        }
+      };
+      clampGlove(gloveL,-0.23);
+      clampGlove(gloveR, 0.23);
+    }
+
+    /* pose the whole keeper body (also reused by the highlight reel) */
+    const airborne = dy > 0.08;
+    poseKeeperBody(rig.position.x + bodyX, bodyY, roll, airborne);
+    S.kFrame = {hx: rig.position.x + bodyX, hy: bodyY, roll, air:airborne};
+  }
+
+  stepNet(dt);
+
+  /* ----- highlights ----- */
+  if(S.phase==='highlights'){
+    stepHighlights(dt);
+    renderer.render(scene, camera);
+    return;
+  }
+
+  /* ----- striker ----- */
+  if(S.phase==='set'){
+    S.t+=dt;
+    poseIdle(S.t, S.psych.nerve);
+    striker.lookAt(0,striker.position.y+1,0);
+    if(S.t > 0.8 + (1-S.psych.nerve)*0.7){ S.phase='runup'; S.t=0; }   // the shaky ones dwell on it
+  }
+  else if(S.phase==='runup'){
+    S.t+=dt;
+    let p = S.t/S.runDur;
+    if(S.fake && !S.fakeDone && p>=S.fakeAt){
+      if(S.t < S.runDur*S.fakeAt + S.fakeHold){
+        striker.position.lerpVectors(S.runFrom, S.runTo, S.fakeAt);
+        poseStutter(S.t);
+        renderer.render(scene, camera);
+        return;
+      }else{
+        S.fakeDone=true;
+        S.t = S.runDur*S.fakeAt;
+        S.runDur *= 0.8;
+      }
+    }
+    p=Math.min(S.t/S.runDur,1);
+    const kickWindow = 0.22/S.runDur;
+    let pw = p;
+    if(S.shooter==='stutter' && p < 1-kickWindow){
+      pw = p - 0.05*Math.sin(p*22)*(1-p);              // hop-hop-hop… choppy approach
+    }
+    striker.position.lerpVectors(S.runFrom, S.runTo, pw);
+    striker.lookAt(0,striker.position.y+1,0);
+    if(p < 1-kickWindow){
+      const spd = S.shooter==='power'? 1.5 :
+                  S.shooter==='stutter'? 0.65+0.7*Math.abs(Math.cos(p*11)) : 1.1;
+      poseRun(spd, dt);
+    }
+    else poseKick((p-(1-kickWindow))/kickWindow * 0.4);
+
+    /* ---- cues appear in research order ---- */
+    // GAZE (earliest, least reliable — elite takers deceive with it)
+    if(p>0.40 && S.tellGaze){
+      const glance=Math.min((p-0.40)/0.25,1);
+      headG.rotation.y = S.tellGaze*0.6*Math.sin(glance*Math.PI);
+    }
+    // HIPS/TRUNK (last two strides, moderate validity, lie-able)
+    if(p>0.60 && S.tellHip){
+      const w=Math.min((p-0.60)/0.30,1);
+      striker.rotation.y += S.tellHip*0.26*w;
+    }
+    // PLANT FOOT (final plant only, ~200ms pre-contact — strongest, ~85% honest)
+    const plantW = Math.min(Math.max((p-(1-kickWindow-0.10))/0.10,0),1);
+    if(S.tellPlant) (S.foot>0? L : R).boot.rotation.y = S.tellPlant*0.65*plantW;
+    // SWING PLANE at contact is physics: it shows the TRUE side, but by then
+    // the ball is ~100ms away — confirmation, not anticipation
+    if(p >= 1-kickWindow && S.trueSide){
+      (S.foot>0? R : L).hip.rotation.z = -S.trueSide*0.16;
+    }
+    // LAST STRIDE length: a long drive-step means a driven low ball
+    if(p >= 1-kickWindow){
+      const strideLen = S.shooter==='power' ? 0.42
+                      : (S.plan && S.plan.target.y<0.9) ? 0.30 : 0.14;
+      const sp=(p-(1-kickWindow))/kickWindow;
+      striker.position.z -= strideLen*(1-sp);
+      striker.position.y -= (strideLen>0.25? 0.05:0.0)*(1-sp);   // sits lower into the drive
+    }
+
+    // a primed (non-feint) dive launches on his final stride — real keepers
+    // initiate ~150-200ms BEFORE contact, riding the plant-foot confirmation
+    if(p>=0.92 && !dive.active){
+      const d=primedDir();
+      if((d.x||d.y) && !d.fake) startDive(d.x, d.y);
+    }
+    if(p>=1){ launchBall(); S.kickT=0; }
+  }
+
+  /* ----- ball flight (+ striker follow-through) ----- */
+  if(S.phase==='flight'){
+    S.t+=dt;
+    if(S.kickT<0.35){
+      S.kickT+=dt;
+      poseKick(0.4 + (S.kickT/0.35)*0.6);
+      striker.lookAt(0,striker.position.y+1,0);
+      if(S.tell!==0) striker.rotation.y += S.tell*0.30;
+    }
+    /* substep so a 100 km/h ball moves ≤8cm per physics tick — it can no longer
+       pass through a glove or your body between frames (the 穿模 you saw) */
+    const nSub = Math.max(1, Math.ceil(S.vel.length()*dt/0.08));
+    const hSub = dt/nSub;
+    for(let sub=0; sub<nSub; sub++){
+      S.vel.y -= 9.81*hSub;
+      S.vel.addScaledVector(S.curveAcc, hSub);
+      if(S.knuckle>0){
+        S.vel.x += (Math.random()-0.5)*S.knuckle*hSub*8;
+        S.vel.y += (Math.random()-0.5)*S.knuckle*hSub*5;
+      }
+      ball.position.addScaledVector(S.vel, hSub);
+
+      if(!S.shotResolved){
+        // gloves: the proper save
+        const R_EFF = GLOVE_R + (dive.active? 0.10 : 0.05);   // hand-eye assist
+        for(const g of [gloveL,gloveR]){
+          if(g.position.distanceTo(ball.position) < R_EFF+BALL_R){
+            tmpA.copy(ball.position).sub(g.position).normalize();
+            S.vel.reflect(tmpA.multiplyScalar(-1)).multiplyScalar(0.45);
+            S.vel.z = -Math.abs(S.vel.z)*0.8 - 2;
+            S.curveAcc.set(0,0,0); S.knuckle=0;
+            resolve('save');
+            break;
+          }
+        }
+        // body: it hits YOU and bounces off — a block, not a pass-through
+        if(!S.shotResolved && !renderer.xr.isPresenting){
+          for(const seg of kSegs){
+            const cp = segClosest(ball.position, seg.a, seg.b);
+            if(cp.distanceTo(ball.position) < seg.r + BALL_R){
+              tmpA.copy(ball.position).sub(cp).normalize();
+              ball.position.copy(cp).addScaledVector(tmpA, seg.r + BALL_R + 0.01);
+              S.vel.reflect(tmpA.multiplyScalar(-1)).multiplyScalar(0.35);
+              S.vel.z = -Math.abs(S.vel.z)*0.6 - 1.5;
+              S.curveAcc.set(0,0,0); S.knuckle=0;
+              resolve('save', true);
+              break;
+            }
+          }
+        }
+      }
+      if(!S.shotResolved && ball.position.z > 0.1) break;
+      if(ball.position.y < BALL_R) break;
+    }
+    ball.rotation.x += 12*dt;
+    if(S.t<3){
+      const k = renderer.xr.isPresenting
+        ? {hx:camera.getWorldPosition(tmpA).x, hy:tmpA.y, roll:0}
+        : (S.kFrame || {hx:0, hy:EYE, roll:0});
+      S.trace.push({t:S.t,
+        p:[ball.position.x, ball.position.y, ball.position.z],
+        gl:[gloveL.position.x, gloveL.position.y, gloveL.position.z],
+        gr:[gloveR.position.x, gloveR.position.y, gloveR.position.z],
+        k:{hx:k.hx, hy:k.hy, roll:k.roll, air:!!k.air}});
+    }
+
+    if(!S.shotResolved && ball.position.z > 0.1){
+      const ax=Math.abs(ball.position.x), y=ball.position.y;
+      const nearPost = (Math.abs(ax-GOAL_W/2)<0.10 && y<GOAL_H+0.1) ||
+                       (y>GOAL_H-0.08 && y<GOAL_H+0.10 && ax<GOAL_W/2+0.1);
+      if(nearPost){
+        S.vel.z = -Math.abs(S.vel.z)*0.5; S.vel.x*=0.6;
+        S.curveAcc.set(0,0,0); S.knuckle=0;
+        resolve('post');
+      }else{
+        const inFrame = ax<GOAL_W/2 && y<GOAL_H;
+        resolve(inFrame? 'goal':'miss');
+      }
+    }
+    if(ball.position.y < BALL_R){
+      ball.position.y=BALL_R;
+      if(Math.abs(S.vel.y)>1){ S.vel.y*=-0.55; S.vel.x*=0.8; S.vel.z*=0.8; }
+      else S.vel.set(0,0,0);
+    }
+    if(S.t>4.5 && !S.shotResolved) resolve('miss');
+    // the back net CATCHES the ball: bulge, absorb, drop
+    if(ball.position.z > 1.45 && Math.abs(ball.position.x)<GOAL_W/2 && ball.position.y<GOAL_H+0.2){
+      punchNet(ball.position.x, ball.position.y, Math.min(S.vel.length()*0.55, 9));
+      ball.position.z = 1.45;
+      S.vel.z *= -0.12;                              // netting has almost no bounce
+      S.vel.x *= 0.35; S.vel.y *= 0.35;              // strings strangle the pace
+      S.curveAcc.set(0,0,0); S.knuckle=0;
+    }
+  }
+
+  renderer.render(scene, camera);
+});
+
+setKeeperVisible(false);
+drawBoard('PENALTY SAVE SIM','Goalkeeper mode');
+</script>
+</body>
+</html>
